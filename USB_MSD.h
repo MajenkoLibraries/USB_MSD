@@ -133,8 +133,6 @@ class USB_MSD : public USBDevice {
         uint8_t _ifBulk;
         uint8_t _epBulk;
         USBManager *_manager;
-        uint32_t _diskSectors;
-        uint32_t _sectorSize;
 
         bool processCommandBlock(msdCBW *);
 
@@ -168,6 +166,9 @@ class USB_MSD : public USBDevice {
         uint32_t _toTransfer;
         uint32_t _fragmentOffset;
 
+        uint32_t getSectorCount();
+        uint32_t getSectorSize();
+
     public:
         USB_MSD(DFSVOL &dv) : _volume(&dv) {}
         USB_MSD(DFSVOL *dv) : _volume(dv) {}
@@ -185,11 +186,6 @@ class USB_MSD : public USBDevice {
         bool onInPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l);
         void onEnumerated();
 
-        void setCapacity(uint32_t nsec, uint32_t secsiz) {
-            _diskSectors = nsec;
-            _sectorSize = secsiz;
-        }
-         
 };
 
 #endif

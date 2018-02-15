@@ -82,14 +82,8 @@ void USB_MSD::configureEndpoints() {
     }
 }
 
-//extern HardwareSerial Serial;
 bool USB_MSD::onSetupPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l) {
     if (ep == _epBulk) {
-//        Serial.printf("Control EP %d Target %d Length %d\r\n", ep, target, l);
-//        for (int i = 0; i < l; i++) {
-//            Serial.printf("%02x ", data[i]);
-//        }
-//        Serial.println();
         return true;
     }
     return false;
@@ -102,30 +96,17 @@ bool USB_MSD::onOutPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l)
 
         if (_state == IDLE) {
             if (cbw->dCBWSignature == 0x43425355) {
-    //            Serial.printf("CBW Signature: %08x\r\n", cbw->dCBWSignature);
-    //            Serial.printf("CBW Tag:       %08x\r\n", cbw->dCBWTag);
-//                Serial.printf("CBW DT Length: %08x\r\n", cbw->dCBWDataTransferLength);
-//                Serial.printf("CBW Flags:     %02x\r\n", cbw->bmCBWFlags);
-    //            Serial.printf("CBW Lun:       %02x\r\n", cbw->bCBWLUN);
-    //            Serial.printf("CBW CB Length: %02x\r\n", cbw->bCBWCBLength);
-
-//                for (int i = 0; i < cbw->bCBWCBLength; i++) {
-//                    Serial.printf("%02x ", cbw->CBWCB[i]);
-//                }
-//                Serial.println();
-
                 return processCommandBlock(cbw);
             }
         } else if (_state == WRITE) {
             // Received data should be stored...
-Serial.printf("Write sector %d (%d remaining) offset %d\r\n", _nextSector, _toTransfer, _fragmentOffset);
-
-            uint8_t *buf = (uint8_t *)alloca(_sectorSize);
+            uint32_t sectorSize = getSectorSize();
+            uint8_t *buf = (uint8_t *)alloca(sectorSize);
             _volume->disk_read(buf, _nextSector, 1);
             memcpy(buf + _fragmentOffset, data, l);
             _volume->disk_write(buf, _nextSector, 1);
             _fragmentOffset += l;
-            if (_fragmentOffset >= _sectorSize) {
+            if (_fragmentOffset >= sectorSize) {
                 _nextSector ++;
                 _toTransfer --;
                 _fragmentOffset = 0;
@@ -158,8 +139,6 @@ bool USB_MSD::processCommandBlock(struct msdCBW *cbw) {
             struct msdCDBRequestSenseCommand *requestSense = (struct msdCDBRequestSenseCommand *)&cbw->CBWCB[0];
 
             uint8_t *buf = (uint8_t *)alloca(requestSense->allocationLength);
-
-//Serial.printf("Sending sense data of size %d\r\n", requestSense->allocationLength);
 
             memset(buf, 0, requestSense->allocationLength);
             _manager->sendBuffer(_epBulk, buf, requestSense->allocationLength);
@@ -197,18 +176,20 @@ bool USB_MSD::processCommandBlock(struct msdCBW *cbw) {
         } break;
 
         case 0x25: { // READ CAPACITY
+            uint32_t sectorSize = getSectorSize();
+            uint32_t diskSectors = getSectorCount();
             struct msdCDBReadCapacityCommand *capacityCommand = (struct msdCDBReadCapacityCommand *)&cbw->CBWCB[0];
             struct msdCDBReadCapacityData capacityData;
 
-            capacityData.lba24 = (_diskSectors >> 24) & 0xFF;
-            capacityData.lba16 = (_diskSectors >> 16) & 0xFF;
-            capacityData.lba8 = (_diskSectors >> 8) & 0xFF;
-            capacityData.lba0 = _diskSectors & 0xFF;
+            capacityData.lba24 = (diskSectors >> 24) & 0xFF;
+            capacityData.lba16 = (diskSectors >> 16) & 0xFF;
+            capacityData.lba8 = (diskSectors >> 8) & 0xFF;
+            capacityData.lba0 = diskSectors & 0xFF;
 
-            capacityData.size24 = (_sectorSize >> 24) & 0xFF;
-            capacityData.size16 = (_sectorSize >> 16) & 0xFF;
-            capacityData.size8 = (_sectorSize >> 8) & 0xFF;
-            capacityData.size0 = _sectorSize & 0xFF;
+            capacityData.size24 = (sectorSize >> 24) & 0xFF;
+            capacityData.size16 = (sectorSize >> 16) & 0xFF;
+            capacityData.size8 = (sectorSize >> 8) & 0xFF;
+            capacityData.size0 = sectorSize & 0xFF;
             
             _manager->sendBuffer(_epBulk, (uint8_t *)&capacityData, sizeof(struct msdCDBReadCapacityData));
             _response.bCSWStatus = 0x00;
@@ -217,14 +198,14 @@ bool USB_MSD::processCommandBlock(struct msdCBW *cbw) {
         } break;
 
         case 0x28: { // READ (10)
+            uint32_t sectorSize = getSectorSize();
             struct msdCDBRead10Command *readCommand = (struct msdCDBRead10Command *)&cbw->CBWCB[0];
             uint32_t lba = (readCommand->lba24 << 24) | (readCommand->lba16 << 16) | (readCommand->lba8 << 8) | readCommand->lba0;
             uint32_t length = (readCommand->length8 << 8) | readCommand->length0;
 
-            uint8_t *buf = (uint8_t *)alloca(_sectorSize);
+            uint8_t *buf = (uint8_t *)alloca(sectorSize);
             _volume->disk_read(buf, lba, 1);
-            _manager->sendBuffer(_epBulk, buf, _sectorSize);
-//            Serial.printf("Sending sector %d\r\n", lba);
+            _manager->sendBuffer(_epBulk, buf, sectorSize);
             _nextSector = lba + 1;
             _toTransfer = length - 1;
 
@@ -292,21 +273,19 @@ bool USB_MSD::onInPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l) 
         if (_manager->isIdle(_epBulk)) {
             switch (_state) {
                 case RESPOND: {
-//                    Serial.printf("Sending response tag %d code %d\r\n", _response.dCSWTag, _response.bCSWStatus);
                     _manager->enqueuePacket(_epBulk, (uint8_t *)&_response, sizeof(_response));
                     _response.dCSWSignature = 0;
                     _state = IDLE;
                 } break;
                 case READ: {
                     if (_toTransfer > 0) {
-                        uint8_t *buf = (uint8_t *)alloca(_sectorSize);
+                        uint32_t sectorSize = getSectorSize();
+                        uint8_t *buf = (uint8_t *)alloca(sectorSize);
                         _volume->disk_read(buf, _nextSector, 1);
-//                        Serial.printf("Sending sector %d\r\n", _nextSector);
                         _nextSector--;
                         _toTransfer--;
-                        _manager->sendBuffer(_epBulk, buf, _sectorSize);
+                        _manager->sendBuffer(_epBulk, buf, sectorSize);
                     } else {
-//        Serial.printf("Sending response tag %d code %d\r\n", _response.dCSWTag, _response.bCSWStatus);
                         _manager->enqueuePacket(_epBulk, (uint8_t *)&_response, sizeof(_response));
                         _response.dCSWSignature = 0;
                         _state = IDLE;
@@ -317,12 +296,20 @@ bool USB_MSD::onInPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l) 
         return true;
     }
 
-
-//        Serial.printf("Bulk in length %d\r\n", l);
-//        return true;
     return false;
 }
 
 void USB_MSD::onEnumerated() {
 }
 
+uint32_t USB_MSD::getSectorCount() {
+    uint32_t sc = 0;
+    _volume->disk_ioctl(GET_SECTOR_COUNT, &sc);
+    return sc;
+}
+
+uint32_t USB_MSD::getSectorSize() {
+    uint32_t sc = 0;
+    _volume->disk_ioctl(GET_SECTOR_SIZE, &sc);
+    return sc;
+}
