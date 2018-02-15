@@ -30,4 +30,5 @@ void loop() {
         dataFile.printf("%2d: %4d\r\n", i, analogRead(i));
     } 
     dataFile.fssync();
+    dataFile.fsclose();
 }
