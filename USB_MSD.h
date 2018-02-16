@@ -142,15 +142,12 @@ class USB_MSD : public USBDevice {
         uint8_t _bulkRxB[USBMSD_BULKEP_SIZE];
         uint8_t _bulkTxA[USBMSD_BULKEP_SIZE];
         uint8_t _bulkTxB[USBMSD_BULKEP_SIZE];
-#define USBMSD_BUFFER_HIGH 4
 #elif defined(__PIC32MZ__)
-#define USBMSD_BUFFER_SIZE 256
 #define USBMSD_BULKEP_SIZE 512
         uint8_t _bulkRxA[USBMSD_BULKEP_SIZE];
         uint8_t _bulkRxB[USBMSD_BULKEP_SIZE];
         uint8_t _bulkTxA[USBMSD_BULKEP_SIZE];
         uint8_t _bulkTxB[USBMSD_BULKEP_SIZE];
-#define USBMSD_BUFFER_HIGH 8
 #endif
 
         struct msdCSW _response;

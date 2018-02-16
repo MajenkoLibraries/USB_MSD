@@ -273,12 +273,14 @@ bool USB_MSD::onInPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l) 
         if (_manager->isIdle(_epBulk)) {
             switch (_state) {
                 case RESPOND: {
+//Serial.println("Respond");
                     _manager->enqueuePacket(_epBulk, (uint8_t *)&_response, sizeof(_response));
                     _response.dCSWSignature = 0;
                     _state = IDLE;
                 } break;
                 case READ: {
                     if (_toTransfer > 0) {
+//Serial.printf("Transfer sector %d\r\n", _nextSector);
                         uint32_t sectorSize = getSectorSize();
                         uint8_t *buf = (uint8_t *)alloca(sectorSize);
                         _volume->disk_read(buf, _nextSector, 1);
@@ -286,6 +288,7 @@ bool USB_MSD::onInPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l) 
                         _toTransfer--;
                         _manager->sendBuffer(_epBulk, buf, sectorSize);
                     } else {
+//Serial.println("Respond");
                         _manager->enqueuePacket(_epBulk, (uint8_t *)&_response, sizeof(_response));
                         _response.dCSWSignature = 0;
                         _state = IDLE;
