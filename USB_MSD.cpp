@@ -1,5 +1,7 @@
 #include <USB_MSD.h>
 
+extern CDCACM uSerial;
+
 uint16_t USB_MSD::getDescriptorLength() {
     return 9 + 7 + 7;
 }
@@ -203,6 +205,8 @@ bool USB_MSD::processCommandBlock(struct msdCBW *cbw) {
             uint32_t lba = (readCommand->lba24 << 24) | (readCommand->lba16 << 16) | (readCommand->lba8 << 8) | readCommand->lba0;
             uint32_t length = (readCommand->length8 << 8) | readCommand->length0;
 
+uSerial.printf("    MSD Read10 LBA %d for %d\r\n", lba, length);
+
             uint8_t *buf = (uint8_t *)alloca(sectorSize);
             _volume->disk_read(buf, lba, 1);
             _manager->sendBuffer(_epBulk, buf, sectorSize);
@@ -284,7 +288,7 @@ bool USB_MSD::onInPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l) 
                         uint32_t sectorSize = getSectorSize();
                         uint8_t *buf = (uint8_t *)alloca(sectorSize);
                         _volume->disk_read(buf, _nextSector, 1);
-                        _nextSector--;
+                        _nextSector++;
                         _toTransfer--;
                         _manager->sendBuffer(_epBulk, buf, sectorSize);
                     } else {
