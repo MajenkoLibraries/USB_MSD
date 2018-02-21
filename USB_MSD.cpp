@@ -1,5 +1,7 @@
 #include <USB_MSD.h>
 
+//extern CDCACM uSerial;
+
 uint16_t USB_MSD::getDescriptorLength() {
     return 9 + 7 + 7;
 }
@@ -122,10 +124,13 @@ bool USB_MSD::onOutPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l)
     return false;
 }
 
+
 bool USB_MSD::processCommandBlock(struct msdCBW *cbw) {
     _response.dCSWTag = cbw->dCBWTag;
     _response.bCSWStatus = 0x01; // Default to failed.
     _response.dCSWSignature = 0x53425355;
+
+//    uSerial.printf("Command 0x%02x\r\n", cbw->CBWCB[0]);
 
 
     switch (cbw->CBWCB[0]) {
@@ -156,9 +161,10 @@ bool USB_MSD::processCommandBlock(struct msdCBW *cbw) {
                 uint8_t *buf = (uint8_t *)alloca(size);
                 struct msdCDBInquiryData *inquiryData = (struct msdCDBInquiryData *)buf;
 
-                inquiryData->peripheral = 0x0E;
-                inquiryData->rmb = 0;
-                inquiryData->version = 0;
+//                inquiryData->peripheral = 0x0E; // Simplified - works on Linux
+                inquiryData->peripheral = 0x00; // Full - required for Windows
+                inquiryData->rmb = 0x80;
+                inquiryData->version = 0x02;
                 inquiryData->format = 2;
                 inquiryData->additionalLength = size - 4;
                 inquiryData->flags1 = 0;
@@ -253,8 +259,55 @@ bool USB_MSD::processCommandBlock(struct msdCBW *cbw) {
 
         } break;
 
+//        case 0xA1: { // ATAPI Passthrough
+//            struct msdCDBAtapiPassthroughCommand *atapiCommand = (struct msdCDBAtapiPassthroughCommand *)&cbw->CBWCB[0];
+
+//            uSerial.printf("ATAPI protocol: %02x\r\n", (atapiCommand->protocol >> 1) & 0x0f);
+//            uSerial.printf("Command:        %02x\r\n", atapiCommand->command);
+//            uSerial.printf("Length:         %02x\r\n", (atapiCommand->flags & 0x03));
+//            uSerial.printf("Sectors:        %02x\r\n", atapiCommand->sectors);
+//            uSerial.printf("LBA:            %06x\r\n", (atapiCommand->lba16 << 16) | (atapiCommand->lba8 << 8) | atapiCommand->lba0);
+
+//            _response.bCSWStatus = 0x00;
+//            _state = RESPOND;
+//        } break;
+
+        case 0x1E: { // Prevent removal
+            _response.bCSWStatus = 0x00;
+            _manager->sendBuffer(_epBulk, (uint8_t *)&_response, sizeof(_response));
+            _state = IDLE;
+        } break;
+
+        case 0x23: { // Read format capacity list
+            // Example: 00 00 00 08,  00 78 08 00 02 00 02 00
+            uint32_t sectorSize = getSectorSize();
+            uint32_t diskSectors = getSectorCount();
+
+            struct msdCDBCapacityList cap;
+            memset(&cap, 0, sizeof(cap));
+            cap.length = 8;
+            cap.type = 2;
+            cap.blocks24 = diskSectors >> 24;
+            cap.blocks16 = diskSectors >> 16;
+            cap.blocks8 = diskSectors >> 8;
+            cap.blocks0 = diskSectors;
+
+            cap.size16 = sectorSize >> 16;
+            cap.size8 = sectorSize >> 8;
+            cap.size0 = sectorSize;
+
+            _response.bCSWStatus = 0x00;
+            _state = RESPOND;
+            _manager->sendBuffer(_epBulk, (uint8_t *)&cap, sizeof(cap));
+        } break;
+            
+
 
         default:
+            _response.bCSWStatus = 0x01;
+            _manager->sendBuffer(_epBulk, (uint8_t *)&_response, sizeof(_response));
+            _state = IDLE;
+//            uSerial.printf("Unhandled SCSI command 0x%02x\r\n", cbw->CBWCB[0]);
 //            if (cbw->bmCBWFlags & 0x80) {
 //                _manager->haltEndpoint(_epBulk);
 //            }
@@ -268,7 +321,7 @@ bool USB_MSD::processCommandBlock(struct msdCBW *cbw) {
     return true;
 }
 
-bool USB_MSD::onInPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l) {
+bool USB_MSD::onInPacket(uint8_t ep, uint8_t __attribute__((unused)) target, uint8_t __attribute__((unused)) *data, uint32_t __attribute__((unused)) l) {
     if (ep == _epBulk) {
         if (_manager->isIdle(_epBulk)) {
             switch (_state) {

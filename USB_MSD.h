@@ -127,6 +127,39 @@ struct msdCDBWrite10Command {
     uint8_t control;
 } __attribute__((packed));
 
+struct msdCDBAtapiPassthroughCommand {
+    uint8_t opcode;
+    uint8_t protocol;
+    uint8_t flags;
+    uint8_t features;
+    uint8_t sectors;
+    uint8_t lba0;
+    uint8_t lba8;
+    uint8_t lba16;
+    uint8_t device;
+    uint8_t command;
+    uint8_t reserved;
+    uint8_t control;
+} __attribute__((packed));
+
+struct msdCDBCapacityList {
+    // Header
+    uint8_t reserved1;
+    uint8_t reserved2;
+    uint8_t reserved3;
+    uint8_t length; // 8
+
+    // Descriptor
+    uint8_t blocks24;
+    uint8_t blocks16;
+    uint8_t blocks8;
+    uint8_t blocks0;
+    uint8_t type;
+    uint8_t size16;
+    uint8_t size8;
+    uint8_t size0;
+} __attribute__((packed));
+
 class USB_MSD : public USBDevice {
     private:
         DFSVOL *_volume;
