@@ -10,7 +10,7 @@ uint8_t USB_MSD::getInterfaceCount() {
     return 1;
 }
 
-bool USB_MSD::getStringDescriptor(uint8_t idx, uint16_t maxlen) {
+bool USB_MSD::getStringDescriptor(uint8_t __attribute__((unused)) idx, uint16_t __attribute__((unused)) maxlen) {
     return false;
 }
 
@@ -66,11 +66,11 @@ void USB_MSD::initDevice(USBManager *manager) {
     _state = IDLE;
 }
 
-bool USB_MSD::getDescriptor(uint8_t ep, uint8_t target, uint8_t id, uint8_t maxlen) {
+bool USB_MSD::getDescriptor(uint8_t __attribute__((unused)) ep, uint8_t __attribute__((unused)) target, uint8_t __attribute__((unused)) id, uint8_t __attribute__((unused)) maxlen) {
     return false;
 }
 
-bool USB_MSD::getReportDescriptor(uint8_t ep, uint8_t target, uint8_t id, uint8_t maxlen) {
+bool USB_MSD::getReportDescriptor(uint8_t __attribute__((unused)) ep, uint8_t __attribute__((unused)) target, uint8_t __attribute__((unused)) id, uint8_t __attribute__((unused)) maxlen) {
     return false;
 }
 
@@ -84,14 +84,14 @@ void USB_MSD::configureEndpoints() {
     }
 }
 
-bool USB_MSD::onSetupPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l) {
+bool USB_MSD::onSetupPacket(uint8_t ep, uint8_t __attribute__((unused)) target, uint8_t __attribute__((unused)) *data, uint32_t __attribute__((unused)) l) {
     if (ep == _epBulk) {
         return true;
     }
     return false;
 }
 
-bool USB_MSD::onOutPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l) {
+bool USB_MSD::onOutPacket(uint8_t ep, uint8_t __attribute__((unused)) target, uint8_t *data, uint32_t l) {
     if (ep == _epBulk) {
 
         struct msdCBW * cbw = (struct msdCBW *)data;
@@ -123,7 +123,6 @@ bool USB_MSD::onOutPacket(uint8_t ep, uint8_t target, uint8_t *data, uint32_t l)
     }
     return false;
 }
-
 
 bool USB_MSD::processCommandBlock(struct msdCBW *cbw) {
     _response.dCSWTag = cbw->dCBWTag;
@@ -170,8 +169,19 @@ bool USB_MSD::processCommandBlock(struct msdCBW *cbw) {
                 inquiryData->flags1 = 0;
                 inquiryData->flags2 = 0;
                 inquiryData->flags3 = 0;
-                memcpy(inquiryData->t10Vendor, "chipKIT ", 8);
-                memcpy(inquiryData->productId, "USB Mass Storage", 16);
+                if (_mfg == NULL) {
+                    memcpy(inquiryData->t10Vendor, "chipKIT ", 8);
+                } else {
+                    memcpy(inquiryData->t10Vendor, "        ", 8);
+                    memcpy(inquiryData->t10Vendor, _mfg, min(strlen(_mfg), 8));
+                }
+
+                if (_model == NULL) {
+                    memcpy(inquiryData->productId, "USB Mass Storage", 16);
+                } else {
+                    memcpy(inquiryData->productId, "                ", 16);
+                    memcpy(inquiryData->productId, _model, min(strlen(_model), 16));
+                }
                 memcpy(inquiryData->productRevision, "1.00", 4);
 
                 _manager->sendBuffer(_epBulk, buf, size);
@@ -183,8 +193,8 @@ bool USB_MSD::processCommandBlock(struct msdCBW *cbw) {
 
         case 0x25: { // READ CAPACITY
             uint32_t sectorSize = getSectorSize();
-            uint32_t diskSectors = getSectorCount();
-            struct msdCDBReadCapacityCommand *capacityCommand = (struct msdCDBReadCapacityCommand *)&cbw->CBWCB[0];
+            uint32_t diskSectors = getSectorCount() - 1;
+            //struct msdCDBReadCapacityCommand *capacityCommand = (struct msdCDBReadCapacityCommand *)&cbw->CBWCB[0];
             struct msdCDBReadCapacityData capacityData;
 
             capacityData.lba24 = (diskSectors >> 24) & 0xFF;

@@ -163,6 +163,9 @@ struct msdCDBCapacityList {
 class USB_MSD : public USBDevice {
     private:
         DFSVOL *_volume;
+        const char *_mfg;
+        const char *_model;
+
         uint8_t _ifBulk;
         uint8_t _epBulk;
         USBManager *_manager;
@@ -200,8 +203,8 @@ class USB_MSD : public USBDevice {
         uint32_t getSectorSize();
 
     public:
-        USB_MSD(DFSVOL &dv) : _volume(&dv) {}
-        USB_MSD(DFSVOL *dv) : _volume(dv) {}
+        USB_MSD(DFSVOL &dv, const char *mfg = NULL, const char *model = NULL) : _volume(&dv), _mfg(mfg), _model(model) {}
+        USB_MSD(DFSVOL *dv, const char *mfg = NULL, const char *model = NULL) : _volume(dv), _mfg(mfg), _model(model) {}
 
         uint16_t getDescriptorLength();
         uint8_t getInterfaceCount();
